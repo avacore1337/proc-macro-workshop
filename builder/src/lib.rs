@@ -1,25 +1,39 @@
+#![recursion_limit = "256"]
+
 extern crate proc_macro;
 
 use syn::{parse_macro_input, DeriveInput, Ident};
 
 use proc_macro::TokenStream;
-// use proc_macro2::{Ident, Span};
 use quote::quote;
 
 #[proc_macro_derive(Builder)]
 pub fn derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
-    eprintln!("TOKENS: {:#?}", ast);
+    // eprintln!("TOKENS: {:#?}", ast);
 
     let name = &ast.ident;
     let bname = format!("{}Builder", name);
     let bident = Ident::new(&bname, name.span());
+    let fields = if let syn::Data::Struct(syn::DataStruct {
+        fields: syn::Fields::Named(syn::FieldsNamed { ref named, .. }),
+        ..
+    }) = ast.data
+    {
+        named
+    } else {
+        unimplemented!();
+        // panic!("Struct has no fields");
+    };
+    let builder_fields = fields.iter().map(|f| {
+        let name = &f.ident;
+        let ty = &f.ty;
+        quote! { #name: std::option::Option<#ty> }
+    });
+
     let expanded = quote! {
         pub struct #bident {
-            executable: Option<String>,
-            args: Option<Vec<String>>,
-            env: Option<Vec<String>>,
-            current_dir: Option<String>,
+            #(#builder_fields,)*
         }
         impl #name {
             pub fn builder() -> #bident{
