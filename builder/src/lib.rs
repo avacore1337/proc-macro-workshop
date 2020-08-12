@@ -58,14 +58,14 @@ pub fn derive(input: TokenStream) -> TokenStream {
         } else if let Some(i_ty) = option_type(ty) {
             quote! {
                 pub fn #name(&mut self, #name: #i_ty) -> &mut Self {
-                    self.#name = Some(#name);
+                    self.#name = std::option::Option::Some(#name);
                     self
                 }
             }
         } else {
             quote! {
                 pub fn #name(&mut self, #name: #ty) -> &mut Self {
-                    self.#name = Some(#name);
+                    self.#name = std::option::Option::Some(#name);
                     self
                 }
             }
@@ -95,7 +95,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }
         impl #bident {
             #(#builder_methods)*
-            pub fn build(&mut self) -> Result<#name, Box<dyn std::error::Error>> {
+            pub fn build(&mut self) -> std::result::Result<#name, std::boxed::Box<dyn std::error::Error>> {
                 Ok(#name{
                     #(#builder_params,)*
                 })
