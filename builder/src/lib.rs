@@ -10,7 +10,7 @@ use quote::quote;
 #[proc_macro_derive(Builder, attributes(builder))]
 pub fn derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
-    eprintln!("TOKENS: {:#?}", ast);
+    // eprintln!("TOKENS: {:#?}", ast);
 
     let name = &ast.ident;
     let bname = format!("{}Builder", name);
@@ -51,23 +51,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
     });
 
     let builder_methods = fields.iter().map(|f| {
-        let name = &f.ident;
+        let name = f.ident.as_ref().expect("all fields must be named");
         let ty = &f.ty;
         if let Some(attr) = builder_of(f) {
-            if let Some(method_name) = get_each_name(attr) {
-                if let Some(v_ty) = vec_type(ty) {
-                    quote! {
-                        pub fn #method_name(&mut self, #name: #v_ty) -> &mut Self {
-                            self.#name.push(#name);
-                            self
-                        }
-                    }
-                } else {
-                    unimplemented!();
-                }
-            } else {
-                unimplemented!();
-            }
+            extend_method(attr, name, ty)
         } else if let Some(i_ty) = option_type(ty) {
             quote! {
                 pub fn #name(&mut self, #name: #i_ty) -> &mut Self {
@@ -119,24 +106,38 @@ pub fn derive(input: TokenStream) -> TokenStream {
     expanded.into()
 }
 
-fn get_each_name(a: &syn::Attribute) -> Option<Ident> {
+fn extend_method(
+    a: &syn::Attribute,
+    name: &syn::Ident,
+    ty: &syn::Type,
+) -> syn::export::TokenStream2 {
     if let Ok(syn::Meta::List(meta)) = a.parse_meta() {
-        eprintln!("META: {:#?}", meta);
-        if let syn::NestedMeta::Meta(syn::Meta::NameValue(ref name_value_meta)) =
-            meta.nested.first()?
-        {
-            if name_value_meta.path.segments.first()?.ident != "each" {
-                return None;
+        // eprintln!("META: {:#?}", meta);
+        if meta.nested.len() != 1 {
+            panic!("bad code");
+        }
+
+        if let syn::NestedMeta::Meta(syn::Meta::NameValue(ref name_value_meta)) = meta.nested[0] {
+            if a.path.segments.len() != 1 || name_value_meta.path.segments[0].ident != "each" {
+                return syn::Error::new_spanned(meta, "expected `builder(each = \"...\")`")
+                    .to_compile_error();
             }
             if let syn::Lit::Str(ref s) = name_value_meta.lit {
-                // unimplemented!();
-                return Some(Ident::new(&s.value(), s.span()));
+                let method_name = Ident::new(&s.value(), s.span());
+                if let Some(v_ty) = vec_type(ty) {
+                    return quote! {
+                        pub fn #method_name(&mut self, #name: #v_ty) -> &mut Self {
+                            self.#name.push(#name);
+                            self
+                        }
+                    };
+                }
             }
         }
     }
-
-    None
+    panic!("bad code");
 }
+
 fn builder_of(f: &syn::Field) -> Option<&syn::Attribute> {
     for attr in &f.attrs {
         let segment = attr.path.segments.first()?;
